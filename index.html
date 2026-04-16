@@ -1,0 +1,192 @@
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const ui = document.getElementById('ui');
+const overlay = document.getElementById('overlay');
+const highscoreUI = document.getElementById('highscore-ui');
+const nameOverlay = document.getElementById('name-overlay');
+const leaderboardPanel = document.getElementById('leaderboard-panel');
+
+// --- NEW MUSIC LOAD ---
+let bgMusic = new Audio('Unnamed.mp3'); 
+bgMusic.loop = true;
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let player = { x: canvas.width / 2, y: canvas.height - 200, vx: 0, radius: 15 };
+let speed = 8, score = 0, gameActive = false, keys = {}, platforms = [];
+let personalBest = parseInt(localStorage.getItem('neonslope_best') || '0');
+highscoreUI.innerHTML = 'BEST: ' + personalBest;
+
+function getLeaderboard() {
+    try { return JSON.parse(localStorage.getItem('neonslope_lb') || '[]'); } catch(e) { return []; }
+}
+function saveLeaderboard(lb) {
+    localStorage.setItem('neonslope_lb', JSON.stringify(lb));
+}
+
+// --- AUDIO ---
+let audioCtx, nextNoteTime = 0, beatCount = 0;
+function playNote(freq, type, duration, vol) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + duration);
+}
+function musicLoop() {
+    if (!gameActive) return;
+    if (audioCtx.currentTime > nextNoteTime) {
+        let step = beatCount % 16;
+        let tempo = 0.15 - (speed * 0.002);
+        let notes = [55, 55, 65, 55, 82, 55, 65, 73];
+        playNote(notes[beatCount % 8], 'square', 0.2, 0.05);
+        if (step % 4 === 0) playNote(40, 'sine', 0.3, 0.2);
+        if (step % 8 === 4) playNote(1000, 'triangle', 0.05, 0.02);
+        nextNoteTime = audioCtx.currentTime + tempo;
+        beatCount++;
+    }
+    requestAnimationFrame(musicLoop);
+}
+
+// --- PLATFORMS ---
+function initPlatforms() {
+    platforms = [];
+    for(let i = 0; i < 15; i++) {
+        platforms.push({ x: canvas.width/2 - 250, y: canvas.height - (i * 150), w: 500, h: 151 });
+    }
+}
+
+// --- GAME FLOW ---
+function startGame() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Start your song
+    bgMusic.currentTime = 0;
+    bgMusic.play();
+
+    initPlatforms();
+    player.x = canvas.width/2; player.vx = 0; score = 0; speed = 8;
+    gameActive = true;
+    overlay.style.display = 'none';
+    nameOverlay.style.display = 'none';
+    leaderboardPanel.style.display = 'none';
+    nextNoteTime = audioCtx.currentTime;
+    musicLoop();
+}
+
+function endGame() {
+    gameActive = false;
+    
+    // Stop your song
+    bgMusic.pause();
+
+    playNote(100, 'sawtooth', 1, 0.2);
+    const isNewBest = score > personalBest;
+    if (isNewBest) {
+        personalBest = score;
+        localStorage.setItem('neonslope_best', personalBest);
+        highscoreUI.innerHTML = 'BEST: ' + personalBest;
+    }
+    setTimeout(() => {
+        document.getElementById('final-score-text').textContent = score;
+        document.getElementById('new-best-text').textContent = isNewBest ? '🔥 NEW PERSONAL BEST!' : 'BEST: ' + personalBest;
+        document.getElementById('name-input').value = '';
+        nameOverlay.style.display = 'block';
+    }, 300);
+}
+
+function submitScore() {
+    const name = document.getElementById('name-input').value.trim().toUpperCase() || 'PLAYER';
+    const lb = getLeaderboard();
+    lb.push({ name, score });
+    lb.sort((a, b) => b.score - a.score);
+    saveLeaderboard(lb.slice(0, 10));
+    nameOverlay.style.display = 'none';
+    showLeaderboard();
+}
+
+function skipSubmit() {
+    nameOverlay.style.display = 'none';
+    overlay.style.display = 'block';
+}
+
+function showLeaderboard() {
+    const lb = getLeaderboard();
+    const container = document.getElementById('lb-entries');
+    if (lb.length === 0) {
+        container.innerHTML = '<p style="color:#0aa;font-size:14px;margin:20px 0;">NO SCORES YET. BE THE FIRST!</p>';
+    } else {
+        container.innerHTML = lb.map((entry, i) =>
+            '<div class="lb-row ' + (i === 0 ? 'gold' : '') + '">' +
+            '<span class="lb-rank">#' + (i+1) + '</span>' +
+            '<span class="lb-name">' + entry.name + '</span>' +
+            '<span class="lb-score">' + entry.score + '</span>' +
+            '</div>'
+        ).join('');
+    }
+    overlay.style.display = 'none';
+    leaderboardPanel.style.display = 'block';
+}
+
+function closeLeaderboard() {
+    leaderboardPanel.style.display = 'none';
+    overlay.style.display = 'block';
+}
+
+// --- INPUT ---
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// --- UPDATE ---
+function update() {
+    if (!gameActive) return;
+    if (keys['ArrowLeft'] || keys['KeyA']) player.vx -= 1.5;
+    if (keys['ArrowRight'] || keys['KeyD']) player.vx += 1.5;
+    player.vx *= 0.92; player.x += player.vx;
+    platforms.forEach(p => p.y += speed);
+
+    if (platforms[0].y > canvas.height) {
+        platforms.shift();
+        score += 10; speed += 0.04;
+        let last = platforms[platforms.length - 1];
+        platforms.push({
+            x: last.x + (Math.random() * 200 - 100),
+            y: last.y - 150,
+            w: Math.max(80, 450 - (score/5)),
+            h: 151
+        });
+    }
+
+    let onTrack = false;
+    platforms.forEach(p => {
+        if (player.x > p.x && player.x < p.x + p.w && player.y > p.y && player.y < p.y + p.h) onTrack = true;
+    });
+
+    if (!onTrack) endGame();
+    ui.innerHTML = 'SCORE: ' + score;
+}
+
+// --- DRAW ---
+function draw() {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    platforms.forEach((p) => {
+        ctx.shadowBlur = 15; ctx.shadowColor = '#0ff';
+        ctx.fillStyle = '#001111';
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+        ctx.strokeStyle = '#0ff'; ctx.lineWidth = 3;
+        ctx.strokeRect(p.x, p.y, p.w, p.h);
+    });
+    ctx.shadowBlur = 25; ctx.shadowColor = '#fff';
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
+    requestAnimationFrame(() => { update(); draw(); });
+}
+initPlatforms();
+draw();
+</script>
