@@ -1,3 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NEON SLOPE</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial Black', sans-serif; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 20px; left: 20px; color: #fff; font-size: 30px; pointer-events: none; text-shadow: 0 0 20px #0ff; }
+        #highscore-ui { position: absolute; top: 20px; right: 20px; color: #0ff; font-size: 20px; pointer-events: none; text-shadow: 0 0 15px #0ff; text-align: right; }
+        #overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #0ff; text-align: center; background: rgba(0,0,0,0.9); padding: 50px; border: 5px solid #0ff; border-radius: 20px; box-shadow: 0 0 50px #0ff; z-index: 50; }
+        button { background: #0ff; color: #000; border: none; padding: 20px 40px; font-size: 25px; font-weight: bold; cursor: pointer; border-radius: 10px; }
+        #leaderboard-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #0ff; text-align: center; background: rgba(0,0,0,0.97); padding: 40px; border: 3px solid #0ff; border-radius: 20px; box-shadow: 0 0 50px #0ff; display: none; min-width: 340px; z-index: 200; }
+        #leaderboard-panel h2 { font-size: 22px; margin-bottom: 16px; letter-spacing: 0.1em; }
+        .lb-row { display: flex; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid #0ff3; font-size: 15px; }
+        .lb-rank { color: #0aa; min-width: 30px; }
+        .lb-name { flex: 1; text-align: left; padding-left: 10px; }
+        .lb-score { color: #fff; }
+        .lb-row.gold .lb-rank, .lb-row.gold .lb-name { color: #ffd700; }
+        #name-overlay { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #0ff; text-align: center; background: rgba(0,0,0,0.97); padding: 40px; border: 3px solid #0ff; border-radius: 20px; box-shadow: 0 0 50px #0ff; z-index: 200; min-width: 300px; }
+        #name-input { background: #001a1a; border: 2px solid #0ff; color: #0ff; padding: 10px 16px; font-size: 18px; border-radius: 8px; margin: 12px 0; width: 100%; text-align: center; font-family: 'Arial Black', sans-serif; outline: none; box-sizing: border-box; }
+        .btn-small { background: #0ff; color: #000; border: none; padding: 10px 24px; font-size: 16px; font-weight: bold; cursor: pointer; border-radius: 8px; margin: 4px; }
+        .btn-ghost { background: transparent; color: #0ff; border: 2px solid #0ff; border-radius: 8px; padding: 10px 24px; font-size: 16px; font-weight: bold; cursor: pointer; margin: 4px; }
+    </style>
+</head>
+<body>
+    <div id="ui">SCORE: 0</div>
+    <div id="highscore-ui">BEST: 0</div>
+
+    <div id="overlay">
+        <h1>NEON SLOPE</h1>
+        <p style="font-size:14px; color:#0aa; letter-spacing:0.12em; margin-bottom:16px;">MADE BY CHEESE STUDIOS</p>
+        <p style="margin-bottom:20px;">GENERATING SYNTHWAVE...</p>
+        <div style="display:flex;gap:12px;justify-content:center;">
+            <button onclick="startGame()">PLAY</button>
+            <button style="background:transparent;color:#0ff;border:3px solid #0ff;padding:20px 24px;font-size:20px;font-weight:bold;cursor:pointer;border-radius:10px;" onclick="showLeaderboard()">🏆 SCORES</button>
+        </div>
+    </div>
+
+    <div id="name-overlay">
+        <h2 style="font-size:22px;margin-bottom:4px;">GAME OVER</h2>
+        <p id="final-score-text" style="font-size:36px;font-weight:bold;color:#fff;margin:8px 0;"></p>
+        <p id="new-best-text" style="font-size:13px;color:#0ff;min-height:18px;margin-bottom:12px;"></p>
+        <p style="font-size:13px;margin-bottom:4px;color:#0aa;">ENTER YOUR NAME</p>
+        <input id="name-input" type="text" maxlength="12" placeholder="PLAYER" />
+        <br>
+        <button class="btn-small" onclick="submitScore()">SUBMIT</button>
+        <button class="btn-ghost" onclick="skipSubmit()">SKIP</button>
+    </div>
+
+    <div id="leaderboard-panel">
+        <h2>🏆 LEADERBOARD</h2>
+        <div id="lb-entries"></div>
+        <button class="btn-ghost" style="margin-top:20px;" onclick="closeLeaderboard()">CLOSE</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -7,8 +64,8 @@ const highscoreUI = document.getElementById('highscore-ui');
 const nameOverlay = document.getElementById('name-overlay');
 const leaderboardPanel = document.getElementById('leaderboard-panel');
 
-// --- NEW MUSIC LOAD ---
-let bgMusic = new Audio('Unnamed.mp3'); 
+// --- LOAD MUSIC ---
+const bgMusic = new Audio('Unnamed.mp3');
 bgMusic.loop = true;
 
 canvas.width = window.innerWidth;
@@ -65,10 +122,9 @@ function initPlatforms() {
 function startGame() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     
-    // Start your song
-    bgMusic.currentTime = 0;
-    bgMusic.play();
-
+    // Play the song
+    bgMusic.play().catch(e => console.log("Music blocked until interaction"));
+    
     initPlatforms();
     player.x = canvas.width/2; player.vx = 0; score = 0; speed = 8;
     gameActive = true;
@@ -82,8 +138,9 @@ function startGame() {
 function endGame() {
     gameActive = false;
     
-    // Stop your song
+    // Stop the song
     bgMusic.pause();
+    bgMusic.currentTime = 0;
 
     playNote(100, 'sawtooth', 1, 0.2);
     const isNewBest = score > personalBest;
@@ -190,3 +247,5 @@ function draw() {
 initPlatforms();
 draw();
 </script>
+</body>
+</html>
