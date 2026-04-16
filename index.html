@@ -64,8 +64,8 @@ const highscoreUI = document.getElementById('highscore-ui');
 const nameOverlay = document.getElementById('name-overlay');
 const leaderboardPanel = document.getElementById('leaderboard-panel');
 
-// --- LOAD MUSIC ---
-const bgMusic = new Audio('Unnamed.mp3');
+// --- AUDIO SETUP ---
+const bgMusic = new Audio('Unnamed.mp3'); 
 bgMusic.loop = true;
 
 canvas.width = window.innerWidth;
@@ -83,7 +83,7 @@ function saveLeaderboard(lb) {
     localStorage.setItem('neonslope_lb', JSON.stringify(lb));
 }
 
-// --- AUDIO ---
+// --- SYNTH AUDIO (ORIGINAL) ---
 let audioCtx, nextNoteTime = 0, beatCount = 0;
 function playNote(freq, type, duration, vol) {
     const osc = audioCtx.createOscillator();
@@ -122,9 +122,10 @@ function initPlatforms() {
 function startGame() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     
-    // Play the song
-    bgMusic.play().catch(e => console.log("Music blocked until interaction"));
-    
+    // START MP3 MUSIC
+    bgMusic.currentTime = 0;
+    bgMusic.play().catch(e => console.log("Music blocked: ", e));
+
     initPlatforms();
     player.x = canvas.width/2; player.vx = 0; score = 0; speed = 8;
     gameActive = true;
@@ -138,9 +139,8 @@ function startGame() {
 function endGame() {
     gameActive = false;
     
-    // Stop the song
+    // STOP MP3 MUSIC
     bgMusic.pause();
-    bgMusic.currentTime = 0;
 
     playNote(100, 'sawtooth', 1, 0.2);
     const isNewBest = score > personalBest;
